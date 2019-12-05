@@ -125,7 +125,7 @@ def tag_outliers(data, window_size, axis, sigma = 10):
 #     print('Total rejected in each IF:', data_tag.sum(0))
     return data_tag
 
-def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = True, tag_delay_outliers = True, outlier_window = 10):
+def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False, tag_delay_outliers = True, outlier_window = 10):
 
     """
     Fits DM with n frequency chunks
