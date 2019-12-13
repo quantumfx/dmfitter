@@ -10,58 +10,60 @@ k_dm = const.e.gauss**2/(2*np.pi*const.m_e*const.c)
 def abs2(x):
     return x.real**2 + x.imag**2
 
-def dphi(dm, ppsr, freqs):
-    dphi = (k_dm * (dm*u.pc/u.cm**3) / ppsr * (freqs**(-2))).to(u.dimensionless_unscaled)
+def dphi(dm, dphi_ref, ppsr, freqs, freq_ref):
+    dphi = dphi_ref + (k_dm * (dm*u.pc/u.cm**3) / ppsr * (freqs**(-2) - freq_ref**(-2))).to(u.dimensionless_unscaled)
     return dphi
 
 def Cxx_chan(data_f):
     return np.sum(abs2(data_f)[1:], axis=0)
 
-def Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
-    dm = p
-    num = np.real( data_f * tmplt_f.conj() * np.exp(2j*np.pi*spin_freqs[:,np.newaxis]*dphi(dm, ppsr, freqs)) )
+def Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
+    dm, dphi_ref = p
+    num = np.real( data_f * tmplt_f.conj() * np.exp(2j*np.pi*spin_freqs[:,np.newaxis]*dphi(dm, dphi_ref, ppsr, freqs, freq_ref)) )
     return np.sum(num[1:], axis=0)
 
-def amps_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
-    return Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs)/Cxx_chan(tmplt_f)
+def amps_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
+    return Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref)/Cxx_chan(tmplt_f)
 
 
 
-def chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph):
-    chisq = Cxx_chan(data_f) / data_var - Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs)**2 / Cxx_chan(tmplt_f)
+def chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph, freq_ref):
+    chisq = Cxx_chan(data_f) / data_var - Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref)**2 / Cxx_chan(tmplt_f)
     return chisq
 
-def chi_all(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph):
-    chisq_chan = chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph)
+def chi_all(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph, freq_ref):
+    chisq_chan = chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph, freq_ref)
     return np.sum(chisq_chan)
 
 
 
-def Cxyd1_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
-    dm = p
-    num = np.real( data_f * tmplt_f.conj() * 2j*np.pi*spin_freqs[:,np.newaxis] * np.exp(2j*np.pi*spin_freqs[:,np.newaxis]*dphi(dm, ppsr, freqs)) )
+def Cxyd1_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
+    dm, dphi_ref = p
+    num = np.real( data_f * tmplt_f.conj() * 2j*np.pi*spin_freqs[:,np.newaxis] * np.exp(2j*np.pi*spin_freqs[:,np.newaxis]*dphi(dm, dphi_ref, ppsr, freqs, freq_ref)) )
     return np.sum(num[1:], axis=0)
 
-def Cxyd2_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
-    dm = p
-    num = np.real( data_f * tmplt_f.conj() * - (2*np.pi*spin_freqs[:,np.newaxis])**2 * np.exp(2j*np.pi*spin_freqs[:,np.newaxis]*dphi(dm, ppsr, freqs)) )
+def Cxyd2_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
+    dm, dphi_ref = p
+    num = np.real( data_f * tmplt_f.conj() * - (2*np.pi*spin_freqs[:,np.newaxis])**2 * np.exp(2j*np.pi*spin_freqs[:,np.newaxis]*dphi(dm, dphi_ref, ppsr, freqs, freq_ref)) )
     return np.sum(num[1:], axis=0)
 
-def w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
-    params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
+def w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
+    params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref]
     return (Cxyd2_chan(*params) * Cxy_chan(*params) + Cxyd1_chan(*params)**2) / Cxx_chan(tmplt_f) / data_var
 
 
 
-def calc_errors(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
-    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
-    xn = k_dm/ppsr * (freqs**(-2))
+def calc_errors(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
+    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, freq_ref)
+    xn = k_dm/ppsr * (freqs**(-2) - freq_ref**(-2))
+    d2chisqdphi_ref2 = -2 * np.sum( wn )
     d2chisqdm2 = -2 * np.sum( xn**2 * wn )
     d2chisqdan2 = 2 * Cxx_chan(tmplt_f)/data_var
     dm_err = 1/np.sqrt(d2chisqdm2)
+    dphi_ref_err = 1/np.sqrt(d2chisqdphi_ref2)
     an_err = 1/np.sqrt(d2chisqdan2)
 
-    return dm_err.to(u.pc/u.cm**3).value, an_err
+    return dm_err.to(u.pc/u.cm**3).value, dphi_ref_err, an_err
 
 def chi_check(dt,z_f,z_var,pp_f,freqs,ngates):
     a = np.sum( (z_f*pp_f.conj()*np.exp(1j*2*np.pi*freqs*dt) + z_f.conj()*pp_f*np.exp(-1j*2*np.pi*freqs*dt))[1:] ) / np.sum( 2 * np.abs(pp_f[1:])**2 )
@@ -248,6 +250,8 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
 
     dm = np.zeros(nt)
     dm_err = np.zeros_like(dm)
+    dphi_ref = np.zeros_like(dm)
+    dphi_ref_err = np.zeros_like(dm)
     amps = np.zeros((nt, nchunk))
     amps_err = np.zeros_like(amps)
 
@@ -262,25 +266,27 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         off_gates = (data[i]<np.median(data[i], axis=0))
 
         dmguess = (0.0*u.pc/u.cm**3)
+        dphi_refguess = template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]
 
-        xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value]
+        xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value, dphi_refguess]
 
         data_var = np.zeros(nchunk)
         for j in range(data_var.size):
                 data_var[j] = np.var(data[i,:,j][off_gates[:,j]])
 
-        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), method='Nelder-Mead')
-        dm_fit = minchisq.x
-        amps_fit = amps_chan([dm_fit], data_f_fitted, tmplt_f, ppsr, spin_freqs, freqs)
+        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph, freq_ref), method='Nelder-Mead')
+        dm_fit, dphi_ref_fit = minchisq.x
+        amps_fit = amps_chan([dm_fit, dphi_ref_fit], data_f_fitted, tmplt_f, ppsr, spin_freqs, freqs, freq_ref)
 
-        dm_fit_err, amps_fit_err = calc_errors([dm_fit], data_f_fitted, data_var * (nph/2),  tmplt_f, ppsr, spin_freqs, freqs)
+        dm_fit_err, dphi_ref_fit_err, amps_fit_err = calc_errors([dm_fit, dphi_ref_fit], data_f_fitted, data_var * (nph/2),  tmplt_f, ppsr, spin_freqs, freqs, freq_ref)
 
         dm[i], dm_err[i] = dm_fit, dm_fit_err
+        dphi_ref[i], dphi_ref_err[i] = dphi_ref_fit, dphi_ref_fit_err
         amps[i], amps_err[i] = amps_fit, amps_fit_err
         print(i)
 
         if shift_data == True:
-            data[i] = disperse(data[i], freqs, -dm_fit*u.pc/u.cm**3, np.inf, ppsr)
+            data[i] = shift2(disperse(data[i], freqs, -dm_fit*u.pc/u.cm**3, freq_ref, ppsr), -dphi_ref_fit)
 
     dm, dm_err = dm  * (u.pc/u.cm**3), dm_err * (u.pc/u.cm**3)
 
