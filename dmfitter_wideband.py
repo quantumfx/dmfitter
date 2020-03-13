@@ -239,7 +239,7 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         return
 
     if np.shape(template) == ():
-        tmplt = data[-250:,...].mean(0)
+        tmplt = None #data[-250:,...].mean(0)
     else:
         tmplt = template
     if nchunk != nf:
@@ -264,11 +264,15 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         data_var = np.zeros(nchunk)
         for j in range(data_var.size):
                 data_var[j] = np.var(data[i,:,j][off_gates[:,j]])
+        # sometimes nan sneaks into data_var due to bad channels, which causes the chisq min to not converge. Temporary fix: fill them with mean of the rest of the channels
+        # TODO: smarter channel variance
+        data_var = np.nan_to_num(data_var,nan=np.nanmean(data_var))
 
         # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
         dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
 
         xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value]
+
         minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), method='Nelder-Mead')
         if minchisq.success != True:
             print('Chi square minimization failed to converge at time '+str(i)+' of '+str(nt)+'. !!BEWARE!!')
