@@ -266,7 +266,8 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
                 data_var[j] = np.var(data[i,:,j][off_gates[:,j]])
         # sometimes nan sneaks into data_var due to bad channels, which causes the chisq min to not converge. Temporary fix: fill them with mean of the rest of the channels
         # TODO: smarter channel variance
-        data_var = np.nan_to_num(data_var,nan=np.nanmean(data_var))
+        # data_var = np.nan_to_num(data_var,nan=np.nanmean(data_var))
+        data_var[np.isnan(data_var)] = np.nanmean(data_var)
 
         # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
         dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
