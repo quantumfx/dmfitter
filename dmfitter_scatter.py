@@ -180,6 +180,29 @@ def w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     return (Cxyd2dm_chan(*params) * Cxy_chan(*params) +
             Cxyd1dm_chan(*params)**2) / Cxx_chan_tmplt(*params) / data_var
 
+def jacobian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
+    params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
+
+    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
+    xn = k_dm / ppsr * (freqs**(-2))
+    dchisqdm = -2 * np.sum(xn * wn).to(u.cm**3/u.pc).value
+    dchisqtau0 = Cxy_chan(*params)*(Cxy_chan(*params)*Cxxd1tau0_chan(*params)-2*Cxx_chan_tmplt(*params)*Cxyd1tau0_chan(*params)) / data_var
+
+    return np.array([dchisqdm,dchisqtau0])
+
+def hessian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
+    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
+    xn = k_dm / ppsr * (freqs**(-2))
+
+    d2chisqdtau02 = np.sum(
+        d2chisqdtau02_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs,
+                           freqs)) * (u.us)**(-2)
+    d2chisqddmdtau0 = np.sum(xn * d2chisqdmdtau0_chan(
+        p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)) * (u.us)**(-1)
+    d2chisqdm2 = -2 * np.sum(xn**2 * wn)
+
+    return np.array([[d2chisqdm2,d2chisqdmdtau0],[d2chisqdmdtau0,d2chisqdtau02]]).value
+
 
 def calc_errors(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
@@ -409,13 +432,20 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         # data_var = np.nan_to_num(data_var,nan=np.nanmean(data_var))
         data_var[np.isnan(data_var)] = np.nanmean(data_var)
 
-        # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
-        dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
-        tauguess = 5*u.us
+        if i == 0:
+            # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
+            dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
+            tauguess = 1*u.us
+        elif i < 5:
+            dmguess = dm[i-1]*(u.pc/u.cm**3)
+            tauguess = np.abs(tau[i-1])*u.us
+        else:
+            dmguess = dm[i-5:i].mean() * (u.pc/u.cm**3)
+            tauguess = tau[i-5:i-1].mean() * u.us
 
         xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value, tauguess.decompose(bases=([u.us])).value]
 
-        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), method='Nelder-Mead')
+        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), jac=jacobian, hess=hessian, method='BFGS')
         if minchisq.success != True:
             print('Chi square minimization failed to converge at time '+str(i)+' of '+str(nt)+'. !!BEWARE!!')
 
