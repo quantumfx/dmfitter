@@ -5,7 +5,8 @@ import astropy.units as u
 import astropy.constants as const
 from scipy.optimize import minimize
 
-k_dm = const.e.gauss**2/(2*np.pi*const.m_e*const.c)
+#k_dm = const.e.gauss**2/(2*np.pi*const.m_e*const.c)
+k_dm = u.s / 2.41e-4 * u.MHz**2 * u.cm**3 / u.pc # k_DM is hard-coded in the literature!
 
 def abs2(x):
     return x.real**2 + x.imag**2
