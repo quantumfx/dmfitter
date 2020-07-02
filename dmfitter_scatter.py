@@ -13,7 +13,7 @@ def abs2(x):
 
 
 def dphi(dm, ppsr, freqs):
-    dphi = (k_dm * (dm * u.pc / u.cm**3) / ppsr * (freqs**(-2))).to(
+    dphi = (k_dm * (dm * 1e-3*u.pc / u.cm**3) / ppsr * (freqs**(-2))).to(
         u.dimensionless_unscaled)
     return dphi
 
@@ -29,8 +29,8 @@ def scatter_factor(tau0, ppsr, spin_freqs, freqs):
     """Returns the Fourier scattering factor"""
     f0 = np.mean(freqs)
     scatter_factor = 1 / (1 + 2j * np.pi * spin_freqs[:, np.newaxis] *
-                          ( ppsr / (tau0 * u.us) *
-                           (freqs / f0)**(4)).to(u.dimensionless_unscaled))
+                          (tau0 * u.us / ppsr *
+                           (freqs / f0)**(-4)).to(u.dimensionless_unscaled))
     return scatter_factor
 
 
@@ -58,16 +58,16 @@ def amps_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     return Cxy_chan(*params) / Cxx_chan_tmplt(*params)
 
 
-def chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph):
+def chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     chisq = Cxx_chan_data(data_f) / data_var - Cxy_chan(
         p, data_f, tmplt_f, ppsr, spin_freqs, freqs)**2 / Cxx_chan_tmplt(
             p, data_f, tmplt_f, ppsr, spin_freqs, freqs) / data_var
     return chisq
 
 
-def chi_all(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph):
+def chi_all(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     chisq_chan = chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs,
-                          freqs, nph)
+                          freqs)
     return np.sum(chisq_chan)
 
 
@@ -76,8 +76,8 @@ def Cxyd1tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = np.real(
         data_f * (tmplt_f * shift_factor(dm, ppsr, spin_freqs, freqs)).conj() *
-        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(2) * -2j *
-        np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(4) * (ppsr/u.us).to(u.dimensionless_unscaled) * (tau0)**(-2))
+        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(2) * 2j *
+        np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4) * (u.us/ppsr).to(u.dimensionless_unscaled))
     return np.sum(num[1:], axis=0)
 
 
@@ -86,8 +86,8 @@ def Cxxd1tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = abs2(tmplt_f) * abs2(scatter_factor(
         tau0, ppsr, spin_freqs,
-        freqs))**2 * (2 * tau0**(-3) ) * (2 * np.pi * spin_freqs[:, np.newaxis] *
-                                    (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled))**2
+        freqs))**2 * (-2 * tau0 ) * (2 * np.pi * spin_freqs[:, np.newaxis] *
+                                    (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))**2
     #     num = abs2(tmplt_f) * abs2(scatter_factor(
     #         tau0, ppsr, spin_freqs, freqs))**2 * scatter_factor(
     #             tau0, ppsr, spin_freqs,
@@ -101,17 +101,17 @@ def Cxyd2tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = np.real(
         data_f * (tmplt_f * shift_factor(dm, ppsr, spin_freqs, freqs)).conj() *
-        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(3) * 2j *
-        (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled)) * (tau0)**(-3))
+        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(3) * -2 *
+        (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))**2)
     return np.sum(num[1:], axis=0)
 
 
 def Cxxd2tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     dm, tau0 = p
     f0 = np.mean(freqs)
-    Bsqr = (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled))**2
-    num = 2 * abs2(tmplt_f) * Bsqr * (-3 +  Bsqr * tau0**(-2)) * abs2(
-        scatter_factor(tau0, ppsr, spin_freqs, freqs))**3 * (tau0**(-4))
+    Bsqr = (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))**2
+    num = 2 * abs2(tmplt_f) * Bsqr * (-1 + 3 * Bsqr * tau0**2) * abs2(
+        scatter_factor(tau0, ppsr, spin_freqs, freqs))**3
     #     num = abs2(tmplt_f) * 2 * (
     #         2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4))**2 * abs2(
     #             scatter_factor(tau0, ppsr, spin_freqs, freqs)
@@ -144,9 +144,9 @@ def Cxyddmdtau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = np.real(
         data_f * (tmplt_f * shift_factor(dm, ppsr, spin_freqs, freqs)).conj() *
-        (2 * np.pi * spin_freqs[:, np.newaxis])**2 *
+        -(2 * np.pi * spin_freqs[:, np.newaxis])**2 *
         scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**2 *
-        (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled) * tau0**(-2))
+        (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))
     return np.sum(num[1:], axis=0)
 
 
@@ -181,17 +181,14 @@ def w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     return (Cxyd2dm_chan(*params) * Cxy_chan(*params) +
             Cxyd1dm_chan(*params)**2) / Cxx_chan_tmplt(*params) / data_var
 
-<<<<<<< HEAD
-=======
 def jacobian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
 
-    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
     xn = k_dm / ppsr * (freqs**(-2))
-    dchisqdm = -2 * np.sum(xn * wn).to(u.cm**3/u.pc).value
-    dchisqtau0 = Cxy_chan(*params)*(Cxy_chan(*params)*Cxxd1tau0_chan(*params)-2*Cxx_chan_tmplt(*params)*Cxyd1tau0_chan(*params)) / data_var
+    dchisqdm = -2 * np.sum(xn * Cxy_chan(*params)*Cxyd1dm_chan(*params)/Cxx_chan_tmplt(*params) / data_var).to(u.cm**3/u.pc*1e3)
+    dchisqtau0 = np.sum(Cxy_chan(*params)*(Cxy_chan(*params)*Cxxd1tau0_chan(*params)-2*Cxx_chan_tmplt(*params)*Cxyd1tau0_chan(*params)) / Cxx_chan_tmplt(*params)**2 / data_var) * (u.us)**-2
 
-    return np.array([dchisqdm,dchisqtau0])
+    return np.array([dchisqdm.value,dchisqtau0.value])
 
 def hessian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
@@ -201,12 +198,11 @@ def hessian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
         d2chisqdtau02_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs,
                            freqs)) * (u.us)**(-2)
     d2chisqddmdtau0 = np.sum(xn * d2chisqdmdtau0_chan(
-        p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)) * (u.us)**(-1)
-    d2chisqdm2 = -2 * np.sum(xn**2 * wn)
+        p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)).to(u.cm**3/u.pc*1e3) * (u.us)**(-1)
+    d2chisqdm2 = -2 * np.sum(xn**2 * wn).to((u.cm**6/u.pc**2*1e6))
 
-    return np.array([[d2chisqdm2,d2chisqdmdtau0],[d2chisqdmdtau0,d2chisqdtau02]]).value
+    return np.array([[d2chisqdm2.value,d2chisqddmdtau0.value],[d2chisqddmdtau0.value,d2chisqdtau02.value]])
 
->>>>>>> parent of 6806d86... fixed defn of kdm
 
 def calc_errors(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
@@ -226,7 +222,7 @@ def calc_errors(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     dm_err = np.sqrt(d2chisqdtau02 / hess_det)
     tau0_err = np.sqrt(d2chisqdm2 / hess_det)
 
-    return dm_err.to(u.pc/u.cm**3).value, an_err, tau0_err.to(u.us).value
+    return dm_err.to(1e-3*u.pc/u.cm**3).value, an_err, tau0_err.to(u.us).value
 
 def chi_check(dt,z_f,z_var,pp_f,freqs,ngates):
     a = np.sum( (z_f*pp_f.conj()*np.exp(1j*2*np.pi*freqs*dt) + z_f.conj()*pp_f*np.exp(-1j*2*np.pi*freqs*dt))[1:] ) / np.sum( 2 * np.abs(pp_f[1:])**2 )
@@ -347,7 +343,7 @@ def shift2(z, dt):
     freqs = np.fft.rfftfreq(ngates,1./ngates)
     return np.real(np.fft.irfft(np.exp(-1j*2*np.pi*freqs[:,np.newaxis]*dt)*np.fft.rfft(z,axis=0),axis=0))
 
-def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False, inf_ref = False):
+def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False, inf_ref = False, init_guess_arr=None):
 
     """
     Fits DM with n frequency chunks
@@ -417,6 +413,8 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
     amps_err = np.zeros_like(amps)
     tau = np.zeros(nt)
     tau_err = np.zeros_like(tau)
+    b = np.zeros((nt,nchunk))
+    b_err = np.zeros_like(b)
 
     tmplt_f = np.fft.rfft(tmplt, axis=0)
     data_f = np.fft.rfft(data, axis=1)
@@ -436,32 +434,26 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         # data_var = np.nan_to_num(data_var,nan=np.nanmean(data_var))
         data_var[np.isnan(data_var)] = np.nanmean(data_var)
 
-<<<<<<< HEAD
-        # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
-        dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
-        tauguess = 5*u.us
-
-        xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value, tauguess.decompose(bases=([u.us])).value]
-
-        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), method='Nelder-Mead')
-=======
+        #dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(1e-3*u.pc/u.cm**3)
         if i == 0:
             # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
-            dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
+            dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(1e-3*u.pc/u.cm**3)
             tauguess = 1*u.us
         elif i < 5:
-            dmguess = dm[i-1]*(u.pc/u.cm**3)
-            tauguess = np.abs(tau[i-1])*u.us
+            dmguess = dm[i-1] * u.pc/u.cm**3*1e-3
+            tauguess = tau[i-1]*u.us
         else:
-            dmguess = dm[i-5:i].mean() * (u.pc/u.cm**3)
-            tauguess = tau[i-5:i-1].mean() * u.us
+            dmguess = dm[i-5:i].mean() * u.pc/u.cm**3 * 1e-3
+            tauguess = np.abs(tau[i-5:i].mean()) * u.us
 
-        xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value, tauguess.decompose(bases=([u.us])).value]
+        xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value*1e-3, tauguess.decompose(bases=([u.us])).value]
+        #minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs), method='Nelder-Mead')
 
-        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), jac=jacobian, hess=hessian, method='BFGS')
->>>>>>> parent of 6806d86... fixed defn of kdm
+        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs), method='trust-krylov', jac=jacobian, hess=hessian)
+
         if minchisq.success != True:
             print('Chi square minimization failed to converge at time '+str(i)+' of '+str(nt)+'. !!BEWARE!!')
+            print(minchisq)
 
         fitted_params = minchisq.x
         dm_fit = fitted_params[0]
@@ -473,12 +465,15 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         dm[i], dm_err[i] = dm_fit, dm_fit_err
         amps[i], amps_err[i] = amps_fit, amps_fit_err
         tau[i], tau_err[i] = tau_fit, tau_fit_err
-        print(i)
+        b[i] = np.real(data_f_fitted[0] - amps[i]*tmplt_f[0])/nph
+        b_err[i] = np.sqrt(data_var * (nph/2)/2)
+        print(i, dm[i]*1e-3, tau[i])
 
         if shift_data == True:
-            data[i] = disperse(data[i], freqs, -dm_fit*u.pc/u.cm**3, np.inf, ppsr)
+            data[i] = disperse(data[i], freqs, -dm_fit*1e-3*u.pc/u.cm**3, np.inf, ppsr)
 
-    dm, dm_err = dm  * (u.pc/u.cm**3), dm_err * (u.pc/u.cm**3)
+    dm, dm_err = dm  * (1e-3*u.pc/u.cm**3), dm_err * (1e-3*u.pc/u.cm**3)
     tau, tau_err = tau * (u.us), tau_err * (u.us)
 
-    return dm, dm_err, amps, amps_err, tau, tau_err, data
+    return dm, dm_err, amps, amps_err, tau, tau_err, b,b_err, data
+
