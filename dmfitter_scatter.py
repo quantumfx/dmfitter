@@ -5,8 +5,8 @@ import astropy.units as u
 import astropy.constants as const
 from scipy.optimize import minimize
 
-#k_dm = const.e.gauss**2/(2*np.pi*const.m_e*const.c)
-k_dm = u.s / 2.41e-4 * u.MHz**2 * u.cm**3 / u.pc # k_DM is hard coded in the literature!!!
+k_dm = const.e.gauss**2/(2*np.pi*const.m_e*const.c)
+#k_dm = u.s / 2.41e-4 * u.MHz**2 * u.cm**3 / u.pc # k_DM is hard coded in the literature!!!
 
 def abs2(x):
     return x.real**2 + x.imag**2
@@ -29,8 +29,8 @@ def scatter_factor(tau0, ppsr, spin_freqs, freqs):
     """Returns the Fourier scattering factor"""
     f0 = np.mean(freqs)
     scatter_factor = 1 / (1 + 2j * np.pi * spin_freqs[:, np.newaxis] *
-                          (tau0 * u.us / ppsr *
-                           (freqs / f0)**(-4)).to(u.dimensionless_unscaled))
+                          ( ppsr / (tau0 * u.us) *
+                           (freqs / f0)**(4)).to(u.dimensionless_unscaled))
     return scatter_factor
 
 
@@ -76,8 +76,8 @@ def Cxyd1tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = np.real(
         data_f * (tmplt_f * shift_factor(dm, ppsr, spin_freqs, freqs)).conj() *
-        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(2) * 2j *
-        np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4) * (u.us/ppsr).to(u.dimensionless_unscaled))
+        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(2) * -2j *
+        np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(4) * (ppsr/u.us).to(u.dimensionless_unscaled) * (tau0)**(-2))
     return np.sum(num[1:], axis=0)
 
 
@@ -86,8 +86,8 @@ def Cxxd1tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = abs2(tmplt_f) * abs2(scatter_factor(
         tau0, ppsr, spin_freqs,
-        freqs))**2 * (-2 * tau0 ) * (2 * np.pi * spin_freqs[:, np.newaxis] *
-                                    (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))**2
+        freqs))**2 * (2 * tau0**(-3) ) * (2 * np.pi * spin_freqs[:, np.newaxis] *
+                                    (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled))**2
     #     num = abs2(tmplt_f) * abs2(scatter_factor(
     #         tau0, ppsr, spin_freqs, freqs))**2 * scatter_factor(
     #             tau0, ppsr, spin_freqs,
@@ -101,17 +101,17 @@ def Cxyd2tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = np.real(
         data_f * (tmplt_f * shift_factor(dm, ppsr, spin_freqs, freqs)).conj() *
-        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(3) * -2 *
-        (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))**2)
+        scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**(3) * 2j *
+        (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled)) * (tau0)**(-3))
     return np.sum(num[1:], axis=0)
 
 
 def Cxxd2tau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     dm, tau0 = p
     f0 = np.mean(freqs)
-    Bsqr = (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))**2
-    num = 2 * abs2(tmplt_f) * Bsqr * (-1 + 3 * Bsqr * tau0**2) * abs2(
-        scatter_factor(tau0, ppsr, spin_freqs, freqs))**3
+    Bsqr = (2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled))**2
+    num = 2 * abs2(tmplt_f) * Bsqr * (-3 +  Bsqr * tau0**(-2)) * abs2(
+        scatter_factor(tau0, ppsr, spin_freqs, freqs))**3 * (tau0**(-4))
     #     num = abs2(tmplt_f) * 2 * (
     #         2 * np.pi * spin_freqs[:, np.newaxis] * (freqs / f0)**(-4))**2 * abs2(
     #             scatter_factor(tau0, ppsr, spin_freqs, freqs)
@@ -144,9 +144,9 @@ def Cxyddmdtau0_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs):
     f0 = np.mean(freqs)
     num = np.real(
         data_f * (tmplt_f * shift_factor(dm, ppsr, spin_freqs, freqs)).conj() *
-        -(2 * np.pi * spin_freqs[:, np.newaxis])**2 *
+        (2 * np.pi * spin_freqs[:, np.newaxis])**2 *
         scatter_factor(tau0, ppsr, spin_freqs, freqs).conj()**2 *
-        (freqs / f0)**(-4)*(u.us/ppsr).to(u.dimensionless_unscaled))
+        (freqs / f0)**(4)*(ppsr/u.us).to(u.dimensionless_unscaled) * tau0**(-2))
     return np.sum(num[1:], axis=0)
 
 
@@ -438,7 +438,7 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         if i == 0:
             # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
             dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(1e-3*u.pc/u.cm**3)
-            tauguess = 1*u.us
+            tauguess = 300*u.us
         elif i < 5:
             dmguess = dm[i-1] * u.pc/u.cm**3*1e-3
             tauguess = tau[i-1]*u.us
