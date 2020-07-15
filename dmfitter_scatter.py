@@ -176,51 +176,71 @@ def d2chisqdmdtau0_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     return num
 
 
-def w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
-    params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
-    return (Cxyd2dm_chan(*params) * Cxy_chan(*params) +
-            Cxyd1dm_chan(*params)**2) / Cxx_chan_tmplt(*params) / data_var
+# def w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
+#     params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
+#     return (Cxyd2dm_chan(*params) * Cxy_chan(*params) +
+#             Cxyd1dm_chan(*params)**2) / Cxx_chan_tmplt(*params) / data_var
 
 def jacobian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
     params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
+    ak = amps_chan(*params)
 
     xn = k_dm / ppsr * (freqs**(-2))
-    dchisqdm = -2 * np.sum(xn * Cxy_chan(*params)*Cxyd1dm_chan(*params)/Cxx_chan_tmplt(*params) / data_var).to(u.cm**3/u.pc*1e3)
-    dchisqtau0 = np.sum(Cxy_chan(*params)*(Cxy_chan(*params)*Cxxd1tau0_chan(*params)-2*Cxx_chan_tmplt(*params)*Cxyd1tau0_chan(*params)) / Cxx_chan_tmplt(*params)**2 / data_var) * (u.us)**-2
+    dchisqdm = -2 * np.sum(ak * xn* Cxyd1dm_chan(*params) / data_var).to(1e3*(u.pc**-1/u.cm**-3))
+    dchisqtau0 = np.sum((ak**2*Cxxd1tau0_chan(*params)-2*ak*Cxyd1tau0_chan(*params)) / data_var) * (1*u.us)
 
-    return np.array([dchisqdm.value,dchisqtau0.value])
+    jac = np.array([dchisqdm.value,dchisqtau0.value])
+    return jac
 
 def hessian(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
-    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
+    params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
+    ak = amps_chan(*params)
+
     xn = k_dm / ppsr * (freqs**(-2))
+    
+    d2chisqdamps_chan = 2 * Cxx_chan_tmplt(*params) / data_var
+    d2chisqdampsddm_chan = -2 * (xn*Cxyd1dm_chan(*params) / data_var).to(1e3*u.pc**-1/u.cm**-3)
+    d2chisqdampsdtau0_chan = 2 * (ak * Cxxd1tau0_chan(*params) - Cxyd1tau0_chan(*params)) / data_var * (1*u.us)
 
-    d2chisqdtau02 = np.sum(
-        d2chisqdtau02_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs,
-                           freqs)) * (u.us)**(-2)
-    d2chisqddmdtau0 = np.sum(xn * d2chisqdmdtau0_chan(
-        p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)).to(u.cm**3/u.pc*1e3) * (u.us)**(-1)
-    d2chisqdm2 = -2 * np.sum(xn**2 * wn).to((u.cm**6/u.pc**2*1e6))
+    d2chisqdtau02 = np.sum((ak**2 * Cxxd2tau0_chan(*params) - 2*ak * Cxyd2tau0_chan(*params)) / data_var)* (1*u.us)**2
+    d2chisqdm2 = (np.sum(-2*ak *xn**2* Cxyd2dm_chan(*params) / data_var)).to((1e6*(u.pc**-2/u.cm**-6)))
+    d2chisqddmdtau0 = -2*np.sum(ak*xn*Cxyddmdtau0_chan(*params) / data_var).to(1e3*(u.pc**-1/u.cm**-3))* (1*u.us)
+     
+    A = np.diag(d2chisqdamps_chan)
+    B = np.array([d2chisqdampsddm_chan.value,d2chisqdampsdtau0_chan.value]).T
+    C = np.array([[d2chisqdm2.value,d2chisqddmdtau0.value],[d2chisqddmdtau0.value,d2chisqdtau02.value]])
+    hess = C
 
-    return np.array([[d2chisqdm2.value,d2chisqddmdtau0.value],[d2chisqddmdtau0.value,d2chisqdtau02.value]])
-
+    return hess
 
 def calc_errors(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs):
-    wn = w_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)
+    params = [p, data_f, tmplt_f, ppsr, spin_freqs, freqs]
+    ak = amps_chan(*params)
     xn = k_dm / ppsr * (freqs**(-2))
 
-    d2chisqdtau02 = np.sum(
-        d2chisqdtau02_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs,
-                           freqs)) * (u.us)**(-2)
-    d2chisqddmdtau0 = np.sum(xn * d2chisqdmdtau0_chan(
-        p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs)) * (u.us)**(-1)
-    d2chisqdm2 = -2 * np.sum(xn**2 * wn)
-    d2chisqdan2 = 2 * Cxx_chan_tmplt(p, data_f, tmplt_f, ppsr, spin_freqs,
-                                     freqs) / data_var
 
-    hess_det = d2chisqdm2 * d2chisqdtau02 - (d2chisqddmdtau0)**2
-    an_err = 1 / np.sqrt(d2chisqdan2)
-    dm_err = np.sqrt(d2chisqdtau02 / hess_det)
-    tau0_err = np.sqrt(d2chisqdm2 / hess_det)
+    # half hessian
+    d2chisqdamps_chan = Cxx_chan_tmplt(*params) / data_var
+    d2chisqdampsddm_chan = - (xn*Cxyd1dm_chan(*params) / data_var).to(1e3*u.pc**-1/u.cm**-3)
+    d2chisqdampsdtau0_chan =  (ak * Cxxd1tau0_chan(*params) - Cxyd1tau0_chan(*params)) / data_var * (1*u.us)
+
+    d2chisqdtau02 = np.sum((ak**2 /2* Cxxd2tau0_chan(*params) - ak * Cxyd2tau0_chan(*params)) / data_var)* (1*u.us)**2
+    d2chisqdm2 = (np.sum(-ak *xn**2* Cxyd2dm_chan(*params) / data_var)).to((1e6*(u.pc**-2/u.cm**-6)))
+    d2chisqddmdtau0 = -np.sum(ak*xn*Cxyddmdtau0_chan(*params) / data_var).to(1e6*(u.cm**3/u.pc))* (1*u.us)
+     
+    Ainv = np.diag(1/d2chisqdamps_chan)
+    B = np.array([d2chisqdampsddm_chan.value,d2chisqdampsdtau0_chan.value]).T
+    C = np.array([[d2chisqdm2.value,d2chisqddmdtau0.value],[d2chisqddmdtau0.value,d2chisqdtau02.value]])
+    M = np.linalg.inv(C - B.T @ Ainv @ B)
+    
+    diagblock_an = Ainv + Ainv @ B @ M @ B.T @ Ainv
+    diagblock_dmtau = M
+    
+    an_err = np.sqrt(np.diag(diagblock_an))
+    dm_err, tau0_err = np.sqrt(np.diag(diagblock_dmtau))
+
+    dm_err *= 1e-3*u.pc/u.cm**3
+    tau0_err *= 1*u.us
 
     return dm_err.to(1e-3*u.pc/u.cm**3).value, an_err, tau0_err.to(u.us).value
 
@@ -449,7 +469,7 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value*1e-3, tauguess.decompose(bases=([u.us])).value]
         #minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs), method='Nelder-Mead')
 
-        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs), method='trust-krylov', jac=jacobian, hess=hessian)
+        minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs), method='trust-exact', jac=jacobian, hess=hessian)
 
         if minchisq.success != True:
             print('Chi square minimization failed to converge at time '+str(i)+' of '+str(nt)+'. !!BEWARE!!')
@@ -470,9 +490,9 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         print(i, dm[i]*1e-3, tau[i])
 
         if shift_data == True:
-            data[i] = disperse(data[i], freqs, -dm_fit*1e-3*u.pc/u.cm**3, np.inf, ppsr)
+            data[i] = disperse(data[i], freqs, -dm_fit*1e-3*(u.pc/u.cm**3), np.inf, ppsr)
 
-    dm, dm_err = dm  * (1e-3*u.pc/u.cm**3), dm_err * (1e-3*u.pc/u.cm**3)
+    dm, dm_err = dm  * (1e-3*(u.pc/u.cm**3)), dm_err * (1e-3*(u.pc/u.cm**3))
     tau, tau_err = tau * (u.us), tau_err * (u.us)
 
     return dm, dm_err, amps, amps_err, tau, tau_err, b,b_err, data
