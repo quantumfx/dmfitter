@@ -163,9 +163,14 @@ def rebin(arr,nbin):
 
 def disperse(pulse, freqs, dm, fref, ppsr):
     dts = k_dm*dm/ppsr * (freqs**(-2) - fref**(-2))
+
+    ngates = pulse.shape[0]
     pulse_shifted = pulse.copy()
-    for i in range(pulse.shape[-1]):
-        pulse_shifted[:,i] = shift(pulse[:,i],dts[i])
+    
+    fc = np.fft.rfftfreq(ngates,1./ngates)
+    pulse_shifted = np.exp(-1j*2*np.pi*fc[:,np.newaxis]*dts[np.newaxis,:])*np.fft.rfft(pulse_shifted,axis=0)
+    pulse_shifted = np.fft.irfft(pulse_shifted, axis=0).real
+    
     return pulse_shifted
 
 def shift2(z, dt):
