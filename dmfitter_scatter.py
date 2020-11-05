@@ -340,11 +340,23 @@ def rebin(arr,nbin):
     newshape = arr.shape[:-1]+(-1,nbin,)
     return arr.reshape(*newshape).mean(-1)
 
+# def disperse(pulse, freqs, dm, fref, ppsr):
+#     dts = k_dm*dm/ppsr * (freqs**(-2) - fref**(-2))
+#     pulse_shifted = pulse.copy()
+#     for i in range(pulse.shape[-1]):
+#         pulse_shifted[:,i] = shift(pulse[:,i],dts[i])
+#     return pulse_shifted
+
 def disperse(pulse, freqs, dm, fref, ppsr):
     dts = k_dm*dm/ppsr * (freqs**(-2) - fref**(-2))
+
+    ngates = pulse.shape[0]
     pulse_shifted = pulse.copy()
-    for i in range(pulse.shape[-1]):
-        pulse_shifted[:,i] = shift(pulse[:,i],dts[i])
+    
+    fc = np.fft.rfftfreq(ngates,1./ngates)
+    pulse_shifted = np.exp(-1j*2*np.pi*fc[:,np.newaxis]*dts[np.newaxis,:])*np.fft.rfft(pulse_shifted,axis=0)
+    pulse_shifted = np.fft.irfft(pulse_shifted, axis=0).real
+    
     return pulse_shifted
 
 def shift2(z, dt):
@@ -455,16 +467,22 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         data_var[np.isnan(data_var)] = np.nanmean(data_var)
 
         #dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(1e-3*u.pc/u.cm**3)
-        if i == 0:
+        if i < 5:
             # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
             dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(1e-3*u.pc/u.cm**3)
-            tauguess = 1*u.us
+            tauguess = 10*u.us
+        
+        # good params for J1713+0747
+#         if i < 10:
+#             dmguess = (0.022*u.pc/u.cm**3).to(1e-3*u.pc/u.cm**3)
+#             tauguess = 25*u.us
+
         elif i < 5:
             dmguess = dm[i-1] * u.pc/u.cm**3*1e-3
             tauguess = tau[i-1]*u.us
         else:
-            dmguess = dm[i-5:i].mean() * u.pc/u.cm**3 * 1e-3
-            tauguess = np.abs(tau[i-5:i].mean()) * u.us
+            dmguess = dm[i-3:i].mean() * u.pc/u.cm**3 * 1e-3
+            tauguess = np.abs(tau[i-3:i].mean()) * u.us
 
         xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value*1e-3, tauguess.decompose(bases=([u.us])).value]
         #minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs), method='Nelder-Mead')

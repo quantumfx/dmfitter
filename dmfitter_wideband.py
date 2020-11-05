@@ -159,11 +159,23 @@ def rebin(arr,nbin):
     newshape = arr.shape[:-1]+(-1,nbin,)
     return arr.reshape(*newshape).mean(-1)
 
+# def disperse(pulse, freqs, dm, fref, ppsr):
+#     dts = k_dm*dm/ppsr * (freqs**(-2) - fref**(-2))
+#     pulse_shifted = pulse.copy()
+#     for i in range(pulse.shape[-1]):
+#         pulse_shifted[:,i] = shift(pulse[:,i],dts[i])
+#     return pulse_shifted
+
 def disperse(pulse, freqs, dm, fref, ppsr):
     dts = k_dm*dm/ppsr * (freqs**(-2) - fref**(-2))
+
+    ngates = pulse.shape[0]
     pulse_shifted = pulse.copy()
-    for i in range(pulse.shape[-1]):
-        pulse_shifted[:,i] = shift(pulse[:,i],dts[i])
+    
+    fc = np.fft.rfftfreq(ngates,1./ngates)
+    pulse_shifted = np.exp(-1j*2*np.pi*fc[:,np.newaxis]*dts[np.newaxis,:])*np.fft.rfft(pulse_shifted,axis=0)
+    pulse_shifted = np.fft.irfft(pulse_shifted, axis=0).real
+    
     return pulse_shifted
 
 def shift2(z, dt):
@@ -182,7 +194,7 @@ def shift2(z, dt):
     freqs = np.fft.rfftfreq(ngates,1./ngates)
     return np.real(np.fft.irfft(np.exp(-1j*2*np.pi*freqs[:,np.newaxis]*dt)*np.fft.rfft(z,axis=0),axis=0))
 
-def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False, inf_ref = False):
+def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False, inf_ref = False, dm_guess = None):
 
     """
     Fits DM with n frequency chunks
@@ -269,12 +281,23 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
         # data_var = np.nan_to_num(data_var,nan=np.nanmean(data_var))
         data_var[np.isnan(data_var)] = np.nanmean(data_var)
 
-        # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
-        dmguess = (template_match(tmplt.mean(-1),data[i].mean(-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
-
+        if dm_guess is not None:
+            dmguess = dm_guess
+#         else:
+#             # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
+        elif i < 60:
+            # smart-ish guess for the DM. better will be to use a running average, or something. This fails sometimes
+            dmguess = (template_match(tmplt.mean(-1),np.nanmean(data[i],axis=-1))[0][0]*ppsr*freqs.mean()**2/k_dm).to(u.pc/u.cm**3)
+#         elif i < 5:
+#             dmguess = dm[i-1] * u.pc/u.cm**3
+        else:
+            dmguess = dm[i-3:i].mean() * u.pc/u.cm**3
+        print(dmguess)
+    
         xguess = [dmguess.decompose(bases=([u.pc,u.cm])).value]
 
         minchisq = minimize(chi_all, x0=xguess, args=(data_f_fitted, data_var * (nph/2), tmplt_f, ppsr, spin_freqs, freqs, nph), method='Nelder-Mead')
+#         print(minchisq)
         if minchisq.success != True:
             print('Chi square minimization failed to converge at time '+str(i)+' of '+str(nt)+'. !!BEWARE!!')
 
@@ -285,7 +308,7 @@ def fit_dm(data, freqs, nchunk, template = None, ppsr = None, shift_data = False
 
         dm[i], dm_err[i] = dm_fit, dm_fit_err
         amps[i], amps_err[i] = amps_fit, amps_fit_err
-        print(i)
+#         print(i)
 
         if shift_data == True:
             data[i] = disperse(data[i], freqs, -dm_fit*u.pc/u.cm**3, np.inf, ppsr)
