@@ -28,7 +28,7 @@ def amps_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref):
 
 
 def chi_chan(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph, freq_ref):
-    chisq = Cxx_chan(data_f) / data_var - Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref)**2 / Cxx_chan(tmplt_f)
+    chisq = Cxx_chan(data_f) / data_var - Cxy_chan(p, data_f, tmplt_f, ppsr, spin_freqs, freqs, freq_ref)**2 / Cxx_chan(tmplt_f) / data_var
     return chisq
 
 def chi_all(p, data_f, data_var, tmplt_f, ppsr, spin_freqs, freqs, nph, freq_ref):
